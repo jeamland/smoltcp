@@ -7,6 +7,7 @@
 use byteorder::{ByteOrder, NetworkEndian};
 
 use super::{Error, Result};
+use crate::time::Duration;
 use crate::wire::icmpv6::{field, Message, Packet};
 use crate::wire::Ipv6Address;
 
@@ -386,6 +387,24 @@ impl<'a> Repr<'a> {
                 packet.set_nr_mcast_addr_rcrds(*nr_mcast_addr_rcrds);
                 packet.payload_mut().copy_from_slice(&data[..]);
             }
+        }
+    }
+}
+
+impl<'a> Repr<'a> {
+    pub(crate) fn max_response_delay(&self) -> Option<Duration> {
+        match self {
+            Self::Query { max_resp_code, .. } => {
+                let max_resp_code = *max_resp_code as u64;
+                if max_resp_code < 32768 {
+                    return Some(Duration::from_millis(max_resp_code));
+                }
+
+                let exp = (max_resp_code as u32 & 0x7000) >> 12;
+                let mant = max_resp_code & 0x0fff;
+                Some(Duration::from_millis(mant | 0x1000) << (exp + 3))
+            }
+            _ => None,
         }
     }
 }

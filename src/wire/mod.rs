@@ -111,7 +111,7 @@ pub(crate) mod ipv6option;
 #[cfg(feature = "proto-ipv6")]
 mod ipv6routing;
 #[cfg(feature = "proto-ipv6")]
-mod mld;
+pub(crate) mod mld;
 #[cfg(all(
     feature = "proto-ipv6",
     any(feature = "medium-ethernet", feature = "medium-ieee802154")

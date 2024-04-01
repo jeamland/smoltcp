@@ -53,6 +53,7 @@ defmt = ["dep:defmt", "heapless/defmt-03"]
 "proto-ipv6-hbh" = ["proto-ipv6"]
 "proto-ipv6-fragmentation" = ["proto-ipv6", "_proto-fragmentation"]
 "proto-ipv6-routing" = ["proto-ipv6"]
+"proto-mld" = ["proto-ipv6", "multicast"]
 "proto-rpl" = ["proto-ipv6-hbh", "proto-ipv6-routing"]
 "proto-sixlowpan" = ["proto-ipv6"]
 "proto-sixlowpan-fragmentation" = ["proto-sixlowpan", "_proto-fragmentation"]
@@ -104,6 +105,7 @@ default = [
   "proto-igmp",
   "proto-dhcpv4",
   "proto-ipv6",
+  "proto-mld",
   "proto-dns",
   "proto-ipv4-fragmentation",
   "proto-sixlowpan-fragmentation",

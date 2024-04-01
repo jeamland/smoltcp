@@ -240,3 +240,17 @@ pub(crate) enum IgmpReportState {
         group: Ipv4Address,
     },
 }
+
+#[cfg(feature = "proto-mld")]
+pub(crate) enum MldReportState {
+    Inactive,
+    ToGeneralQuery {
+        timeout: crate::time::Instant,
+        interval: crate::time::Duration,
+        next_index: usize,
+    },
+    ToSpecificQuery {
+        timeout: crate::time::Instant,
+        address: Ipv6Address,
+    },
+}

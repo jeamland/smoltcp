@@ -1,6 +1,12 @@
 use crate::wire::ipv6option::RouterAlertType;
+#[cfg(feature = "proto-mld")]
+use crate::wire::mld::RecordType;
 
 use super::*;
+
+#[cfg(feature = "proto-mld")]
+const ALL_MLD2_ROUTERS: Ipv6Address =
+    Ipv6Address::new(0xff, 0x02, 0x00, 0x00, 0x00, 0x00, 0x00, 0x16);
 
 /// Enum used for the process_hopbyhop function. In some cases, when discarding a packet, an ICMMP
 /// parameter problem message needs to be transmitted to the source of the address. In other cases,
@@ -325,7 +331,7 @@ impl InterfaceInner {
         &mut self,
         _sockets: &mut SocketSet,
         ip_repr: Ipv6Repr,
-        _router_alert: Option<RouterAlertType>,
+        router_alert: Option<RouterAlertType>,
         ip_payload: &'frame [u8],
     ) -> Option<Packet<'frame>> {
         let icmp_packet = check!(Icmpv6Packet::new_checked(ip_payload));
@@ -381,6 +387,15 @@ impl InterfaceInner {
                 #[cfg(feature = "medium-ip")]
                 Medium::Ip => None,
             },
+
+            #[cfg(feature = "proto-mld")]
+            Icmpv6Repr::Mld(mld_repr)
+                if ip_repr.src_addr.is_link_local()
+                    && ip_repr.hop_limit == 1
+                    && matches!(router_alert, Some(RouterAlertType::Mld)) =>
+            {
+                self.process_mld(mld_repr)
+            }
 
             // Don't report an error if a packet with unknown type
             // has been handled by an ICMP socket
@@ -479,6 +494,70 @@ impl InterfaceInner {
         Some(Packet::new_ipv6(
             ipv6_reply_repr,
             IpPayload::Icmpv6(icmp_repr),
+        ))
+    }
+
+    #[cfg(feature = "proto-mld")]
+    pub(super) fn mldv2_listener_join_packet<'any>(
+        &mut self,
+        multicast_addr: Ipv6Address,
+        mld_report_buffer: &'any mut [u8],
+    ) -> Option<Packet<'any>> {
+        let iface_addr = self.ipv6_addr()?;
+
+        let mut record = MldAddressRecord::new_unchecked(mld_report_buffer);
+        record.set_record_type(RecordType::ChangeToExclude);
+        record.set_mcast_addr(multicast_addr);
+
+        let mld = MldRepr::Report {
+            nr_mcast_addr_rcrds: 1,
+            data: record.into_inner(),
+        };
+
+        let icmp = Icmpv6Repr::Mld(mld);
+
+        let packet = Packet::new_ipv6(
+            Ipv6Repr {
+                src_addr: iface_addr,
+                dst_addr: ALL_MLD2_ROUTERS,
+                next_header: IpProtocol::Icmpv6,
+                payload_len: icmp.buffer_len(),
+                hop_limit: 1,
+            },
+            IpPayload::Icmpv6(icmp),
+        );
+
+        Some(packet)
+    }
+
+    #[cfg(feature = "proto-mld")]
+    pub(super) fn mldv2_listener_leave_packet<'any>(
+        &self,
+        multicast_addr: Ipv6Address,
+        mld_report_buffer: &'any mut [u8],
+    ) -> Option<Packet<'any>> {
+        let iface_addr = self.ipv6_addr()?;
+
+        let mut record = MldAddressRecord::new_unchecked(mld_report_buffer);
+        record.set_record_type(RecordType::ChangeToInclude);
+        record.set_mcast_addr(multicast_addr);
+
+        let mld = MldRepr::Report {
+            nr_mcast_addr_rcrds: 1,
+            data: record.into_inner(),
+        };
+
+        let icmp = Icmpv6Repr::Mld(mld);
+
+        Some(Packet::new_ipv6(
+            Ipv6Repr {
+                src_addr: iface_addr,
+                dst_addr: ALL_MLD2_ROUTERS,
+                next_header: IpProtocol::Icmpv6,
+                payload_len: icmp.buffer_len(),
+                hop_limit: 1,
+            },
+            IpPayload::Icmpv6(icmp),
         ))
     }
 }

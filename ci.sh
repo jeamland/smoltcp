@@ -25,6 +25,7 @@ FEATURES_TEST=(
     "std,medium-ethernet,proto-ipv6,socket-tcp"
     "std,medium-ethernet,medium-ip,proto-ipv4,socket-icmp,socket-tcp"
     "std,medium-ip,proto-ipv6,socket-icmp,socket-tcp"
+    "std,medium-ip,proto-ipv6,socket-icmp,socket-tcp,proto-mld"
     "std,medium-ieee802154,proto-sixlowpan,socket-udp"
     "std,medium-ieee802154,proto-sixlowpan,proto-sixlowpan-fragmentation,socket-udp"
     "std,medium-ieee802154,proto-rpl,proto-sixlowpan,proto-sixlowpan-fragmentation,socket-udp"
@@ -39,9 +40,9 @@ FEATURES_TEST_NIGHTLY=(
 )
 
 FEATURES_CHECK=(
-    "medium-ip,medium-ethernet,medium-ieee802154,proto-ipv6,proto-ipv6,proto-igmp,proto-dhcpv4,proto-ipsec,socket-raw,socket-udp,socket-tcp,socket-icmp,socket-dns,async"
-    "defmt,medium-ip,medium-ethernet,proto-ipv6,proto-ipv6,proto-igmp,proto-dhcpv4,socket-raw,socket-udp,socket-tcp,socket-icmp,socket-dns,async"
-    "defmt,alloc,medium-ip,medium-ethernet,proto-ipv6,proto-ipv6,proto-igmp,proto-dhcpv4,socket-raw,socket-udp,socket-tcp,socket-icmp,socket-dns,async"
+    "medium-ip,medium-ethernet,medium-ieee802154,proto-ipv6,proto-ipv6,proto-igmp,proto-mld,proto-dhcpv4,proto-ipsec,socket-raw,socket-udp,socket-tcp,socket-icmp,socket-dns,async"
+    "defmt,medium-ip,medium-ethernet,proto-ipv6,proto-ipv6,proto-igmp,proto-mld,proto-dhcpv4,socket-raw,socket-udp,socket-tcp,socket-icmp,socket-dns,async"
+    "defmt,alloc,medium-ip,medium-ethernet,proto-ipv6,proto-ipv6,proto-igmp,proto-mld,proto-dhcpv4,socket-raw,socket-udp,socket-tcp,socket-icmp,socket-dns,async"
 )
 
 test() {

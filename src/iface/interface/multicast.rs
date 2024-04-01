@@ -69,9 +69,34 @@ impl Interface {
                     Ok(false)
                 }
             }
-            // Multicast is not yet implemented for other address families
-            #[allow(unreachable_patterns)]
-            _ => Err(MulticastError::Ipv6NotSupported),
+
+            #[cfg(feature = "proto-mld")]
+            IpAddress::Ipv6(addr) => {
+                let is_not_new = self
+                    .inner
+                    .ipv6_multicast_groups
+                    .insert(addr, ())
+                    .map_err(|_| MulticastError::GroupTableFull)?
+                    .is_some();
+                let mut buffer = [0u8; 20];
+                if is_not_new {
+                    Ok(false)
+                } else if let Some(pkt) = self.inner.mldv2_listener_join_packet(addr, &mut buffer) {
+                    // Send initial membership report
+                    let tx_token = device
+                        .transmit(timestamp)
+                        .ok_or(MulticastError::Exhausted)?;
+
+                    // NOTE(unwrap): packet destination is multicast, which is always routable and doesn't require neighbor discovery.
+                    self.inner
+                        .dispatch_ip(tx_token, PacketMeta::default(), pkt, &mut self.fragmenter)
+                        .unwrap();
+
+                    Ok(true)
+                } else {
+                    Ok(false)
+                }
+            }
         }
     }
 
@@ -112,9 +137,30 @@ impl Interface {
                     Ok(false)
                 }
             }
-            // Multicast is not yet implemented for other address families
-            #[allow(unreachable_patterns)]
-            _ => Err(MulticastError::Ipv6NotSupported),
+
+            #[cfg(feature = "proto-mld")]
+            IpAddress::Ipv6(addr) => {
+                let was_not_present = self.inner.ipv6_multicast_groups.remove(&addr).is_none();
+                let mut buffer = [0u8; 20];
+                if was_not_present {
+                    Ok(false)
+                } else if let Some(pkt) = self.inner.mldv2_listener_leave_packet(addr, &mut buffer)
+                {
+                    // Send group leave packet
+                    let tx_token = device
+                        .transmit(timestamp)
+                        .ok_or(MulticastError::Exhausted)?;
+
+                    // NOTE(unwrap): packet destination is multicast, which is always routable and doesn't require neighbor discovery.
+                    self.inner
+                        .dispatch_ip(tx_token, PacketMeta::default(), pkt, &mut self.fragmenter)
+                        .unwrap();
+
+                    Ok(true)
+                } else {
+                    Ok(false)
+                }
+            }
         }
     }
 

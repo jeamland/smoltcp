@@ -19,6 +19,8 @@ mod sixlowpan;
 
 #[cfg(feature = "proto-igmp")]
 mod igmp;
+#[cfg(feature = "proto-mld")]
+mod mld;
 #[cfg(feature = "multicast")]
 mod multicast;
 
@@ -115,11 +117,15 @@ pub struct InterfaceInner {
     #[cfg(feature = "proto-ipv4")]
     any_ip: bool,
     routes: Routes,
-    #[cfg(feature = "proto-igmp")]
+    #[cfg(all(feature = "proto-igmp"))]
     ipv4_multicast_groups: LinearMap<Ipv4Address, (), IFACE_MAX_MULTICAST_GROUP_COUNT>,
     /// When to report for (all or) the next multicast group membership via IGMP
-    #[cfg(feature = "proto-igmp")]
+    #[cfg(all(feature = "proto-igmp"))]
     igmp_report_state: IgmpReportState,
+    #[cfg(all(feature = "proto-mld"))]
+    ipv6_multicast_groups: LinearMap<Ipv6Address, (), IFACE_MAX_MULTICAST_GROUP_COUNT>,
+    #[cfg(all(feature = "proto-mld"))]
+    mld_report_state: MldReportState,
 }
 
 /// Configuration structure used for creating a network interface.
@@ -229,10 +235,14 @@ impl Interface {
                 routes: Routes::new(),
                 #[cfg(any(feature = "medium-ethernet", feature = "medium-ieee802154"))]
                 neighbor_cache: NeighborCache::new(),
-                #[cfg(feature = "proto-igmp")]
+                #[cfg(all(feature = "proto-ipv4", feature = "proto-igmp"))]
                 ipv4_multicast_groups: LinearMap::new(),
-                #[cfg(feature = "proto-igmp")]
+                #[cfg(all(feature = "proto-ipv4", feature = "proto-igmp"))]
                 igmp_report_state: IgmpReportState::Inactive,
+                #[cfg(all(feature = "proto-mld"))]
+                ipv6_multicast_groups: LinearMap::new(),
+                #[cfg(all(feature = "proto-mld"))]
+                mld_report_state: MldReportState::Inactive,
                 #[cfg(feature = "medium-ieee802154")]
                 sequence_no,
                 #[cfg(feature = "medium-ieee802154")]
@@ -447,6 +457,10 @@ impl Interface {
             #[cfg(feature = "proto-igmp")]
             {
                 did_something |= self.igmp_egress(device);
+            }
+            #[cfg(feature = "proto-igmp")]
+            {
+                did_something |= self.mld_egress(device);
             }
 
             if did_something {
@@ -778,7 +792,9 @@ impl InterfaceInner {
             #[cfg(feature = "proto-rpl")]
             IpAddress::Ipv6(Ipv6Address::LINK_LOCAL_ALL_RPL_NODES) => true,
             #[cfg(feature = "proto-ipv6")]
-            IpAddress::Ipv6(addr) => self.has_solicited_node(addr),
+            IpAddress::Ipv6(addr) => {
+                self.has_solicited_node(addr) || self.ipv6_multicast_groups.get(&addr).is_some()
+            }
             #[allow(unreachable_patterns)]
             _ => false,
         }
