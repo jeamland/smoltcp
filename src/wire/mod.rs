@@ -107,7 +107,7 @@ mod ipv6fragment;
 #[cfg(feature = "proto-ipv6")]
 mod ipv6hbh;
 #[cfg(feature = "proto-ipv6")]
-mod ipv6option;
+pub(crate) mod ipv6option;
 #[cfg(feature = "proto-ipv6")]
 mod ipv6routing;
 #[cfg(feature = "proto-ipv6")]

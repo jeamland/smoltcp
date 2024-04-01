@@ -1,3 +1,5 @@
+use crate::wire::ipv6option::RouterAlertType;
+
 use super::*;
 
 /// Enum used for the process_hopbyhop function. In some cases, when discarding a packet, an ICMMP
@@ -6,7 +8,7 @@ use super::*;
 #[allow(clippy::large_enum_variant)]
 enum HopByHopResponse<'frame> {
     /// Continue processing the IPv6 packet.
-    Continue((IpProtocol, &'frame [u8])),
+    Continue((IpProtocol, Option<RouterAlertType>, &'frame [u8])),
     /// Discard the packet and maybe send back an ICMPv6 packet.
     Discard(Option<Packet<'frame>>),
 }
@@ -180,14 +182,15 @@ impl InterfaceInner {
             return None;
         }
 
-        let (next_header, ip_payload) = if ipv6_repr.next_header == IpProtocol::HopByHop {
-            match self.process_hopbyhop(ipv6_repr, ipv6_packet.payload()) {
-                HopByHopResponse::Discard(e) => return e,
-                HopByHopResponse::Continue(next) => next,
-            }
-        } else {
-            (ipv6_repr.next_header, ipv6_packet.payload())
-        };
+        let (next_header, router_alert, ip_payload) =
+            if ipv6_repr.next_header == IpProtocol::HopByHop {
+                match self.process_hopbyhop(ipv6_repr, ipv6_packet.payload()) {
+                    HopByHopResponse::Discard(e) => return e,
+                    HopByHopResponse::Continue(next) => next,
+                }
+            } else {
+                (ipv6_repr.next_header, None, ipv6_packet.payload())
+            };
 
         if !self.has_ip_addr(ipv6_repr.dst_addr)
             && !self.has_multicast_group(ipv6_repr.dst_addr)
@@ -206,6 +209,7 @@ impl InterfaceInner {
             sockets,
             meta,
             ipv6_repr,
+            router_alert,
             next_header,
             handled_by_raw_socket,
             ip_payload,
@@ -235,10 +239,12 @@ impl InterfaceInner {
         let ext_repr = check!(Ipv6ExtHeaderRepr::parse(&ext_hdr));
         let hbh_hdr = check!(Ipv6HopByHopHeader::new_checked(ext_repr.data));
         let hbh_repr = check!(Ipv6HopByHopRepr::parse(&hbh_hdr));
+        let mut router_alert = None;
 
         for opt_repr in &hbh_repr.options {
             match opt_repr {
                 Ipv6OptionRepr::Pad1 | Ipv6OptionRepr::PadN(_) => (),
+                Ipv6OptionRepr::RouterAlert(alert_type) => router_alert = Some(*alert_type),
                 #[cfg(feature = "proto-rpl")]
                 Ipv6OptionRepr::Rpl(_) => {}
 
@@ -264,6 +270,7 @@ impl InterfaceInner {
 
         HopByHopResponse::Continue((
             ext_repr.next_header,
+            router_alert,
             &ip_payload[ext_repr.header_len() + ext_repr.data.len()..],
         ))
     }
@@ -275,12 +282,13 @@ impl InterfaceInner {
         sockets: &mut SocketSet,
         meta: PacketMeta,
         ipv6_repr: Ipv6Repr,
+        router_alert: Option<RouterAlertType>,
         nxt_hdr: IpProtocol,
         handled_by_raw_socket: bool,
         ip_payload: &'frame [u8],
     ) -> Option<Packet<'frame>> {
         match nxt_hdr {
-            IpProtocol::Icmpv6 => self.process_icmpv6(sockets, ipv6_repr, ip_payload),
+            IpProtocol::Icmpv6 => self.process_icmpv6(sockets, ipv6_repr, router_alert, ip_payload),
 
             #[cfg(any(feature = "socket-udp", feature = "socket-dns"))]
             IpProtocol::Udp => self.process_udp(
@@ -317,6 +325,7 @@ impl InterfaceInner {
         &mut self,
         _sockets: &mut SocketSet,
         ip_repr: Ipv6Repr,
+        _router_alert: Option<RouterAlertType>,
         ip_payload: &'frame [u8],
     ) -> Option<Packet<'frame>> {
         let icmp_packet = check!(Icmpv6Packet::new_checked(ip_payload));

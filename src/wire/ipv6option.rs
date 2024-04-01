@@ -1,3 +1,5 @@
+use byteorder::{ByteOrder, NetworkEndian};
+
 use super::{Error, Result};
 #[cfg(feature = "proto-rpl")]
 use super::{RplHopByHopPacket, RplHopByHopRepr};
@@ -11,6 +13,8 @@ enum_with_unknown! {
         Pad1 = 0,
         /// Multiple bytes of padding
         PadN = 1,
+        /// Router Alert
+        RouterAlert = 5,
         /// RPL Option
         Rpl  = 0x63,
     }
@@ -21,6 +25,7 @@ impl fmt::Display for Type {
         match *self {
             Type::Pad1 => write!(f, "Pad1"),
             Type::PadN => write!(f, "PadN"),
+            Type::RouterAlert => write!(f, "RouterAlert"),
             Type::Rpl => write!(f, "RPL"),
             Type::Unknown(id) => write!(f, "{id}"),
         }
@@ -219,6 +224,29 @@ impl<'a, T: AsRef<[u8]> + ?Sized> fmt::Display for Ipv6Option<&'a T> {
     }
 }
 
+#[derive(Debug, PartialEq, Eq, Clone, Copy)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
+#[repr(u16)]
+pub enum RouterAlertType {
+    Mld = 0,
+    Unknown = 0xffff,
+}
+
+impl From<u16> for RouterAlertType {
+    fn from(value: u16) -> Self {
+        match value {
+            0 => Self::Mld,
+            _ => Self::Unknown,
+        }
+    }
+}
+
+impl From<RouterAlertType> for u16 {
+    fn from(value: RouterAlertType) -> Self {
+        value as u16
+    }
+}
+
 /// A high-level representation of an IPv6 Extension Header Option.
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
@@ -226,6 +254,7 @@ impl<'a, T: AsRef<[u8]> + ?Sized> fmt::Display for Ipv6Option<&'a T> {
 pub enum Repr<'a> {
     Pad1,
     PadN(u8),
+    RouterAlert(RouterAlertType),
     #[cfg(feature = "proto-rpl")]
     Rpl(RplHopByHopRepr),
     Unknown {
@@ -245,7 +274,9 @@ impl<'a> Repr<'a> {
         match opt.option_type() {
             Type::Pad1 => Ok(Repr::Pad1),
             Type::PadN => Ok(Repr::PadN(opt.data_len())),
-
+            Type::RouterAlert => Ok(Repr::RouterAlert(
+                NetworkEndian::read_u16(opt.data()).into(),
+            )),
             #[cfg(feature = "proto-rpl")]
             Type::Rpl => Ok(Repr::Rpl(RplHopByHopRepr::parse(
                 &RplHopByHopPacket::new_checked(opt.data())?,
@@ -270,6 +301,7 @@ impl<'a> Repr<'a> {
         match *self {
             Repr::Pad1 => 1,
             Repr::PadN(length) => field::DATA(length).end,
+            Repr::RouterAlert(_) => field::DATA(2).end,
             #[cfg(feature = "proto-rpl")]
             Repr::Rpl(opt) => field::DATA(opt.buffer_len() as u8).end,
             Repr::Unknown { length, .. } => field::DATA(length).end,
@@ -287,6 +319,11 @@ impl<'a> Repr<'a> {
                 for x in opt.data_mut().iter_mut() {
                     *x = 0
                 }
+            }
+            Repr::RouterAlert(alert_type) => {
+                opt.set_option_type(Type::RouterAlert);
+                opt.set_data_len(2);
+                NetworkEndian::write_u16(opt.data_mut(), alert_type.into());
             }
             #[cfg(feature = "proto-rpl")]
             Repr::Rpl(rpl) => {
@@ -371,6 +408,9 @@ impl<'a> fmt::Display for Repr<'a> {
         match *self {
             Repr::Pad1 => write!(f, "{} ", Type::Pad1),
             Repr::PadN(len) => write!(f, "{} length={} ", Type::PadN, len),
+            Repr::RouterAlert(alert_type) => {
+                write!(f, "{} type={:?}", Type::RouterAlert, alert_type)
+            }
             #[cfg(feature = "proto-rpl")]
             Repr::Rpl(rpl) => write!(f, "{} {rpl}", Type::Rpl),
             Repr::Unknown { type_, length, .. } => write!(f, "{type_} length={length} "),
