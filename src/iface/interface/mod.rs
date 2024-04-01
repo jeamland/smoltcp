@@ -19,13 +19,16 @@ mod sixlowpan;
 
 #[cfg(feature = "proto-igmp")]
 mod igmp;
+#[cfg(feature = "multicast")]
+mod multicast;
+
 #[cfg(feature = "socket-tcp")]
 mod tcp;
 #[cfg(any(feature = "socket-udp", feature = "socket-dns"))]
 mod udp;
 
-#[cfg(feature = "proto-igmp")]
-pub use igmp::MulticastError;
+#[cfg(feature = "multicast")]
+pub use multicast::MulticastError;
 
 use super::packet::*;
 

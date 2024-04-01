@@ -16,7 +16,7 @@ mod socket_set;
 
 mod packet;
 
-#[cfg(feature = "proto-igmp")]
+#[cfg(feature = "multicast")]
 pub use self::interface::MulticastError;
 pub use self::interface::{Config, Interface, InterfaceInner as Context};
 
